@@ -1,0 +1,329 @@
+---
+title: "Tourlane Marketing Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(shiny)
+library(plotly)
+library(lubridate)
+library(tidyr)
+
+bia <- read_xlsx("bia.xlsx", sheet = 2)
+
+## Preparing the dataset
+bia$OPPORTUNITY_STAGE[is.na(bia$OPPORTUNITY_STAGE)]<- c("Unknown")
+bia2 <- bia %>% filter(!is.na(BOOKED_DATE)) %>% separate(BOOKED_DATE, c("year", "month", "day"))
+
+## featurising
+channels <- c(unique(bia$ATTRIBUTION_CHANNEL[!is.na(bia$ATTRIBUTION_CHANNEL)]))
+destinations <- unique(bia$DESTINATION_NAME)
+markets <- unique(tolower(bia$PHONE_COUNTRY))
+bookings <- unique(bia$OPPORTUNITY_STAGE)
+
+```
+
+Sidebar {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+**CHANNELS**
+
+```{r}
+
+selectInput("attr_chan", label = "Channel:", choices = channels, selected =channels, multiple = TRUE)
+
+```
+
+
+<br>
+
+**MARKET**
+
+```{r}
+
+selectInput("markt", label = "Markets:", choices = markets, selected = markets, multiple = TRUE)
+
+```
+
+
+
+<br>
+
+**DESTINATIONS**
+
+```{r}
+
+selectInput("dest", label = "Destinations:", choices = destinations, selected = destinations, multiple = TRUE)
+
+```
+
+
+<br>
+    
+**BOOKING STATUS**
+
+
+```{r include=TRUE}
+
+selectInput("book", label = "Booking Stage:", choices = bookings, selected = bookings, multiple = TRUE)
+
+```
+
+
+### Description
+
+```{r include=FALSE}
+
+
+```
+
+Row {data-height=300}
+-----------------------------------------------------------------------
+### Converstion Rate
+**Conversion Rate**
+
+```{r}
+
+renderValueBox({
+ 
+visits <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book)) %>% summarise(count=n()) %>% tbl_df()
+
+leads <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (LEAD_STATUS=="qualified")) %>% summarise(count=n()) %>% tbl_df()
+  
+  valueBox(
+    
+    value = paste0(formatC(100*ifelse(visits$count !=0, leads$count/visits$count,NA), format = "f", digits = 1), "%"),
+    
+    color = "blue"
+  )
+})
+
+```
+
+### Booking Rate
+**Booking Rate**
+
+```{r}
+
+renderValueBox({
+ 
+visits <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book)) %>% summarise(count=n()) %>% tbl_df()
+
+bookings <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (OPPORTUNITY_STAGE=="Booked")) %>% summarise(count=n()) %>% tbl_df()
+
+  valueBox(
+    
+    value = paste0(formatC(100*ifelse(visits$count !=0, bookings$count/visits$count,NA), format = "f", digits = 1), "%"),
+    
+    color = "blue"
+  )
+})
+
+```
+
+### Visits
+
+**Visits**
+```{r}
+renderValueBox({
+ 
+visits <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book)) %>% summarise(count=n()) %>% tbl_df()
+  
+  valueBox(
+    
+    value = visits$count,
+    
+    color = "blue"
+  )
+})
+
+
+```
+
+### Leads
+**Leads**
+
+```{r}
+renderValueBox({
+ 
+leads <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (LEAD_STATUS=="qualified")) %>% summarise(count=n()) %>% tbl_df()
+  
+  valueBox(
+    
+    value = leads$count,
+    
+    color = "blue"
+  )
+})
+
+```
+
+### Bookings
+
+**Bookings**
+```{r}
+
+renderValueBox({
+ 
+bookings <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (OPPORTUNITY_STAGE=="Booked")) %>% summarise(count=n()) %>% tbl_df()
+  
+  valueBox(
+    
+    value = bookings$count,
+    
+    color = "blue"
+  )
+})
+
+```
+
+### Revenues
+**Revenues**
+
+```{r}
+renderValueBox({
+ 
+revenues <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book)) %>% summarise(Total=sum(BOOKING_VALUE, na.rm = TRUE)) %>% tbl_df()
+
+  valueBox(
+    
+    value = if_else(revenues$Total>10^6,paste0("€ ", round(revenues$Total/10^6,2), "M"),paste0("€ ", round(revenues$Total/10^3,2), "K")),
+    
+    color = "blue"
+  )
+})
+
+```
+
+### Revenues %
+
+**Revenues %**
+```{r}
+
+renderValueBox({
+ 
+revenues <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book)) %>% summarise(rate=sum(BOOKING_VALUE, na.rm = TRUE)/sum(bia$BOOKING_VALUE, na.rm = TRUE)) %>% tbl_df()
+
+  valueBox(
+
+    value = paste0(formatC(100*revenues$rate, format = "f", digits = 2), "%"),
+
+    
+    color = "blue"
+  )
+})
+
+```
+
+
+### Avg Revenues
+
+**Avg Revenues**
+```{r}
+
+renderValueBox({
+ 
+revenues <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book)) %>% summarise(Total=sum(BOOKING_VALUE, na.rm = TRUE)) %>% tbl_df()
+
+bookings <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (OPPORTUNITY_STAGE=="Booked")) %>% summarise(count=n()) %>% tbl_df()
+
+
+  valueBox(
+
+    value = paste0("€ ", formatC(revenues$Total/bookings$count/10^3, format = "f", digits = 2), "K"),
+    
+    color = "blue"
+  )
+})
+
+```
+
+
+Row {data-height=2500}
+-----------------------------------------------------------------------
+
+### Marketing performance
+
+**Adjusted conversion rate per channel**
+```{r}
+renderPlotly({
+visits <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book))%>% group_by(ATTRIBUTION_CHANNEL) %>% summarise(visits_count=n()) %>% arrange(desc(visits_count)) %>% tbl_df()
+
+opportun <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (OPPORTUNITY_STAGE=="Booked")) %>% group_by(ATTRIBUTION_CHANNEL) %>% summarise(booked_count=n()) %>% arrange(desc(booked_count)) %>% tbl_df()
+
+df1 <- full_join(visits, opportun, by="ATTRIBUTION_CHANNEL") %>% mutate(cr=ifelse(visits_count!=0,round(booked_count/visits_count,2),NA))
+
+df1 <- df1 %>% mutate(weight=booked_count/sum(df1$booked_count, na.rm = TRUE), adj_cr=round(100*cr*weight),2) %>% arrange(desc(adj_cr))
+
+p1 <- ggplot(data = df1[df1$adj_cr>0 & !is.na(df1$adj_cr),], aes(x=reorder(ATTRIBUTION_CHANNEL, -adj_cr), y=adj_cr))+geom_col(color="blue", fill="blue")+labs(title = "", x="Marketing channels", y="Actual Conversion rate")+theme_bw()+theme(axis.text.x = element_text(vjust = 0.5, angle = 45, color="blue"), plot.title = element_text())
+
+p1 %>% ggplotly()
+
+})
+
+
+
+```
+
+### Business impact
+
+**Visits vs Bookings by destinations**
+```{r}
+renderPlotly({
+visits <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book))%>% group_by(DESTINATION_NAME) %>% summarise(visits_count=n()) %>% arrange(desc(visits_count)) %>% tbl_df()
+
+opportun <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (OPPORTUNITY_STAGE=="Booked")) %>% group_by(DESTINATION_NAME) %>% summarise(booked_count=n()) %>% arrange(desc(booked_count)) %>% tbl_df()
+
+df2 <- full_join(visits, opportun, by="DESTINATION_NAME") %>% arrange(desc(booked_count))
+
+p2 <- ggplot()+geom_col(data = df2, aes(x=reorder(DESTINATION_NAME, -visits_count), y=visits_count), fill="lightgreen")+geom_boxplot(data = df2, aes(x=DESTINATION_NAME, y=booked_count), fill="red", color="red")+labs(title = "", x="Destinations", y="Visits vs Bookings")+ theme_bw() +theme(axis.text.x = element_text(vjust = 0.5, angle = 45, color="blue"))+annotate("text",x=df2$DESTINATION_NAME, y=df2$visits_count+20, label=df2$visits_count)
+
+p2 %>% ggplotly()
+
+})
+
+
+```
+
+
+Row {data-height=2000}
+-----------------------------------------------------------------------
+###
+**Average time to convert leads**
+```{r}
+renderPlotly({
+df3 <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & !is.na(LEAD_DATE) & !is.na(BOOKED_DATE))%>% mutate(LEADTIME=difftime(BOOKED_DATE, LEAD_DATE, units = "days")) %>% group_by(ATTRIBUTION_CHANNEL) %>% summarise(lead_time=median(LEADTIME, na.rm = TRUE)) %>% arrange(desc(lead_time)) %>% tbl_df()
+
+
+p3 <- ggplot()+geom_col(data = df3, aes(x=reorder(ATTRIBUTION_CHANNEL, -lead_time), y=lead_time), fill="blue")+labs(title = "", x="Marketing Channels", y="Median Time to convert")+theme_bw() +theme(axis.text.x = element_text(vjust = 0.5, angle = 45, color="blue"))+annotate("text",x=df3$ATTRIBUTION_CHANNEL, y=df3$lead_time+2, label=df3$lead_time)
+
+p3 %>% ggplotly()
+
+})
+
+```
+
+###
+**Booking revenue trend**
+```{r}
+renderPlotly({
+
+df4 <- bia %>% filter((ATTRIBUTION_CHANNEL %in% input$attr_chan) & (DESTINATION_NAME %in% input$dest) & (PHONE_COUNTRY %in% input$markt) & (OPPORTUNITY_STAGE %in% input$book) & (!is.na(BOOKED_DATE))) %>% mutate(Month=month(BOOKED_DATE)) %>% group_by(Month) %>% summarise(revenues=sum(BOOKING_VALUE, na.rm = TRUE)) %>% tbl_df()
+
+p4 <- ggplot(data = df4, aes(x=Month, y=revenues/10^3))+geom_line(aes(color="red"))+ scale_x_discrete(breaks=c(1:12), labels=month.abb) + labs(title = "", x="Months", y="Revenues in Thousands")+theme_bw()+theme(axis.text.x = element_text(vjust = 0.5, angle = 45, color="blue"), legend.position = "none")+annotate("text",x=df4$Month[df4$revenues %in% c(max(df4$revenues), min(df4$revenues))], y=c(round(max(df4$revenues)/10^3,0), round(min(df4$revenues)/10^3,0)), label=c(paste0("max:",round(max(df4$revenues)/10^3,0)-5," K"), paste0("min:", round(min(df4$revenues)/10^3,0)+5," K")))
+
+#+annotate("text",x=df4$Month, y=df4$revenues+20, label=df4$revenues)
+
+p4 %>% ggplotly()
+
+})
+
+```
